@@ -5,7 +5,7 @@ import pyautogui, webbrowser, pytesseract
 import mediapipe as mp
 from mediapipe.framework.formats import landmark_pb2
 
-from time import sleep
+from time import sleep, time
 
 # you have to download from https://github.com/UB-Mannheim/tesseract/wiki first
 # https://stackoverflow.com/questions/50951955/pytesseract-tesseractnotfound-error-tesseract-is-not-installed-or-its-not-i
@@ -23,6 +23,8 @@ x, y, w, h = pyautogui.locateOnScreen(
 # initiate the game
 pyautogui.click(x+w//2, y+h//2)
 sleep(.2)
+reset = True
+last_keypoints = []
 
 def get_reward():
     global x, y, w, h
@@ -34,7 +36,7 @@ def get_reward():
     # OCR the msg of the reward
     msg = pytesseract.image_to_string(im)
     reward = msg.split()[-2]
-    print(reward)
+    print('reward:', reward)
     return float(reward)
 
 def lose():
@@ -48,7 +50,7 @@ def lose():
         False
 
 
-def get_state(draw=False):
+def get_state(last_keypoints, draw=False):
     # tutorial of pose estimation
     # https://google.github.io/mediapipe/solutions/pose.html#output
 
@@ -63,6 +65,10 @@ def get_state(draw=False):
     mp_pose = mp.solutions.pose
     pose = mp_pose.Pose()
     results = pose.process(img)
+
+    # temporarily
+    if not results:
+        return last_keypoints
 
     # get specific joint
     landmark_subset = landmark_pb2.NormalizedLandmarkList(
@@ -102,9 +108,6 @@ def get_state(draw=False):
     return keypoints
 
 while True:
-    # action = 'Q', 'W', 'O', 'P'
-    # time of control in range of (0,1]
-
     # restart the game if lose
     if lose():
         last_reward = get_reward()
@@ -112,18 +115,29 @@ while True:
         sleep(0.1)
         pyautogui.keyUp('space')
 
+    # sample from action space
+    kb_choice = np.random.choice(['Q','W','O','P'])
+    time_choice = 0.1  # np.random.random()
+
+    # action = 'Q', 'W', 'O', 'P'
+    # time of control in range of (0,1]
+
     # read reward
     reward = get_reward()
 
     # get state
-    keypoints = get_state(draw=False)
-    print(keypoints)
+    # maybe have to create a memory if not detected
+    keypoints = get_state(last_keypoints, draw=False)
+    last_keypoints = keypoints
 
-    # sample from action space
-    kb_choice = np.random.choice(['Q','W','O','P'])
-    time_choice = 0.1 # np.random.random()
+        # execute action
+    if reset:
+        s = time()
+        pyautogui.keyDown(kb_choice)
+        reset = False
 
-    # execute action
-    pyautogui.keyDown(kb_choice)
-    sleep(time_choice)
-    pyautogui.keyUp(kb_choice)
+    e = time()
+    print('time:', e-s)
+    if e-s > time_choice:
+        pyautogui.keyUp(kb_choice)
+        reset = True
