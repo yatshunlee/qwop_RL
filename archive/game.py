@@ -23,8 +23,10 @@ x, y, w, h = pyautogui.locateOnScreen(
 # initiate the game
 pyautogui.click(x+w//2, y+h//2)
 sleep(.2)
-reset = True
-last_keypoints = []
+
+time_choice = 0.1 # Press Duration
+reset = True # Check if the pressing time > time_choice
+last_keypoints = [] # temp solution for undetectable case
 
 def get_reward():
     global x, y, w, h
@@ -67,7 +69,10 @@ def get_state(last_keypoints, draw=False):
     results = pose.process(img)
 
     # temporarily
-    if not results:
+    if not results.pose_landmarks:
+        print('Cant find state')
+        cv2.imshow('img',img)
+        cv2.waitKey(0)
         return last_keypoints
 
     # get specific joint
@@ -108,19 +113,14 @@ def get_state(last_keypoints, draw=False):
     return keypoints
 
 while True:
+    s = time()
+
     # restart the game if lose
     if lose():
         last_reward = get_reward()
         pyautogui.keyDown('space')
         sleep(0.1)
         pyautogui.keyUp('space')
-
-    # sample from action space
-    kb_choice = np.random.choice(['Q','W','O','P'])
-    time_choice = 0.1  # np.random.random()
-
-    # action = 'Q', 'W', 'O', 'P'
-    # time of control in range of (0,1]
 
     # read reward
     reward = get_reward()
@@ -130,14 +130,43 @@ while True:
     keypoints = get_state(last_keypoints, draw=False)
     last_keypoints = keypoints
 
-        # execute action
-    if reset:
-        s = time()
-        pyautogui.keyDown(kb_choice)
-        reset = False
+    # action space
+    kb_choice = np.random.choice([
+            'Q', 'W', 'O', 'P',
+            'QW', 'QO', 'QP',
+            'WO', 'WP', ''
+    ])
+
+    # execute action method 1
+    for key in kb_choice:
+        pyautogui.keyDown(key)
+    sleep(time_choice)
+    for key in kb_choice:
+        pyautogui.keyUp(key)
 
     e = time()
     print('time:', e-s)
-    if e-s > time_choice:
-        pyautogui.keyUp(kb_choice)
-        reset = True
+
+    # execute action method 2
+    # if reset:
+    #     # sample from action space
+    #     kb_choice = np.random.choice([
+    #         'Q', 'W', 'O', 'P',
+    #         'QW', 'QO', 'QP',
+    #         'WO', 'WP', ''
+    #     ])
+    #
+    #     # press timer
+    #     s = time()
+    #     for key in kb_choice:
+    #         pyautogui.keyDown(key)
+    #     # not allow new sample action
+    #     reset = False
+    #
+    # e = time()
+    # print('time:', e-s)
+    # if e-s > time_choice:
+    #     for key in kb_choice:
+    #         pyautogui.keyUp(key)
+    #     # allow new sample action
+    #     reset = True
