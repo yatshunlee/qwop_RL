@@ -137,36 +137,35 @@ while True:
             'WO', 'WP', ''
     ])
 
-    # execute action method 1
-    for key in kb_choice:
-        pyautogui.keyDown(key)
-    sleep(time_choice)
-    for key in kb_choice:
-        pyautogui.keyUp(key)
+    # # execute action method 1
+    # for key in kb_choice:
+    #     pyautogui.keyDown(key)
+    # sleep(time_choice)
+    # for key in kb_choice:
+    #     pyautogui.keyUp(key)
 
-    e = time()
-    print('time:', e-s)
-
-    # execute action method 2
-    # if reset:
-    #     # sample from action space
-    #     kb_choice = np.random.choice([
-    #         'Q', 'W', 'O', 'P',
-    #         'QW', 'QO', 'QP',
-    #         'WO', 'WP', ''
-    #     ])
-    #
-    #     # press timer
-    #     s = time()
-    #     for key in kb_choice:
-    #         pyautogui.keyDown(key)
-    #     # not allow new sample action
-    #     reset = False
-    #
     # e = time()
     # print('time:', e-s)
-    # if e-s > time_choice:
-    #     for key in kb_choice:
-    #         pyautogui.keyUp(key)
-    #     # allow new sample action
-    #     reset = True
+
+    # execute action method 2
+    if reset:
+        # sample from action space
+        kb_choice = np.random.choice([
+            'Q', 'W', 'O', 'P',
+            'QW', 'QO', 'QP',
+            'WO', 'WP', ''
+        ])
+        # press timer
+        s = time()
+        for key in kb_choice:
+            pyautogui.keyDown(key)
+        # not allow new sample action
+        reset = False
+        
+    e = time()
+    print('time:', e-s)
+    if e-s > time_choice:
+        for key in kb_choice:
+            pyautogui.keyUp(key)
+        # allow new sample action
+        reset = True
