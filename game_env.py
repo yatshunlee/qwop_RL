@@ -7,7 +7,9 @@ from selenium import webdriver
 driver = webdriver.Chrome()
 driver.get('http://localhost:8000/Athletics.html')
 sleep(3)
-
+#Since the pyautogui.locateOnScreen can only get the value of picture comes from pyautogui.screenshot, So add below code to capture the game screen
+cap = pyautogui.screenshot(region=(26, 142, 640, 400))
+cap.save('game/start.png')
 # initiate the game
 # locate the game screen
 x, y, w, h = pyautogui.locateOnScreen(
