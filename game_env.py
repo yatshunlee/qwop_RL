@@ -46,19 +46,11 @@ class qwopEnv(Env):
         self.driver.get('http://localhost:8000/Athletics.html')
         sleep(3)
 
-        # # Since the pyautogui.locateOnScreen can only get
-        # # the value of picture comes from pyautogui.screenshot,
-        # # so add below code to capture the game screen
-        # cap = pyautogui.screenshot(region=(26, 142, 640, 400))
-        # cap.save('game/start_screen.png')
-
-        # locate the game screen
+        # locate the game screen and auto click
         x, y, w, h = pyautogui.locateOnScreen(
             'game/start_screen.png',
             confidence=0.7
         )
-
-        # initiate the game
         pyautogui.click(x+w//2, y+h//2)
         sleep(.2)
 
