@@ -6,9 +6,10 @@ from gym import Env, spaces
 
 class qwopEnv(Env):
     """
-        Custom Environment that follows gym interface.
+    Custom Environment that follows gym interface.
     """
 
+    # Game settings
     PRESS_DURATION = 0.1 # action duration
     MAX_DURATION = 90 # max seconds per one round
     NUM_STATES = 71 # total num of body states
@@ -23,12 +24,12 @@ class qwopEnv(Env):
 
         # Define a discrete action space ranging from 0 to 10
         self.action_space = spaces.Discrete(len(self.ACTIONS_SPACE))
-        # define a 1-D observation space
+        # Define a 1-D observation space
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=[self.NUM_STATES], dtype=np.float32
         )
 
-        # Initialize
+        # Initialize (temp)
         self.gameover = False
         self.score = 0.
         self.scoreTime = 0.
@@ -36,7 +37,11 @@ class qwopEnv(Env):
         self.game_start()
 
     def game_start(self):
-        # turn on the game on a browser
+        """
+        Start the game on a browser
+        :return:
+        """
+
         self.driver = webdriver.Chrome()
         self.driver.get('http://localhost:8000/Athletics.html')
         sleep(3)
@@ -58,10 +63,17 @@ class qwopEnv(Env):
         sleep(.2)
 
     def get_variable(self,var_name):
-        # JS adaptor
+        """
+        Retrieve variables from localhost (game)
+        :return: specific variable
+        """
         return self.driver.execute_script(f'return {var_name};')
 
     def get_state(self):
+        """
+        Retrieve game states as well as body states from JS adaptor.
+        :return: obs, reward, done, info
+        """
         game_state = self.get_variable('globalgamestate')
         body_state = self.get_variable('globalbodystate')
 
@@ -69,9 +81,9 @@ class qwopEnv(Env):
         time = game_state['scoreTime']
 
         if (game_state['gameEnded'] > 0) or (game_state['gameOver'] > 0) or (time > self.MAX_DURATION):
-            self.gameover = True
+            self.gameover = done = True
         else:
-            self.gameover = False
+            self.gameover = done = False
 
         states = []
         for body_part in body_state.values():
@@ -79,13 +91,13 @@ class qwopEnv(Env):
                 states.append(v)
         states = np.array(states)
 
-        return states, reward
+        return states, reward, done, []
 
     def step(self, i):
         """
         Executes a step in the environment by applying an action.
         Returns the new observation, reward, completion status, and other info.
-        :return:
+        :return: self.get_state()
         """
         # execute action
         for key in self.ACTIONS_SPACE[i]:
@@ -99,7 +111,7 @@ class qwopEnv(Env):
     def reset(self):
         """
         Resets the environment to its initial state and returns the initial observation.
-        :return:
+        :return: states in self.get_state() only
         """
         # restart the game
         pyautogui.keyDown('space')
@@ -110,6 +122,9 @@ class qwopEnv(Env):
         self.gameover = False
         self.score = 0.
         self.scoreTime = 0.
+
+        # return states only
+        return self.get_state()[0]
 
     def render(self, mode="human"):
         pass
@@ -125,6 +140,7 @@ if __name__ == '__main__':
             env.reset()
         else:
             s = time()
+            # return obs, reward, done, info from step function
             env.step(env.action_space.sample())
             e = time()
             print('time for one iter:', e-s)
