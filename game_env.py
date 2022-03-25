@@ -155,3 +155,16 @@ class qwopEnv(Env):
 
     def close(self):
         pass
+
+if __name__ == '__main__':
+    env = qwopEnv()
+
+    while True:
+        if env.gameover:
+            env.reset()
+        else:
+            s = time()
+            # return obs, reward, done, info from step function
+            env.step(env.action_space.sample())
+            e = time()
+            print('time for one iter:', e-s)
