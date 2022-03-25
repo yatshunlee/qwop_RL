@@ -100,7 +100,7 @@ class qwopEnv(Env):
         if time > self.MAX_DURATION:
             if self.terminate():
                 self.gameover = done = True
-        elif game_state['gameEnded'] > 0 or game_state['gameOver'] > 0:
+        elif (game_state['gameEnded'] > 0) or (game_state['gameOver']) > 0:
             self.gameover = done = True
         else:
             self.gameover = done = False
@@ -139,7 +139,7 @@ class qwopEnv(Env):
         :return: states in self.get_state() only
         """
 
-        self.press_key('space', self.PRESS_DURATION)
+        self.press_key(['space'], self.PRESS_DURATION)
 
         # Initialize
         self.gameover = False
@@ -165,6 +165,7 @@ if __name__ == '__main__':
         else:
             s = time()
             # return obs, reward, done, info from step function
-            env.step(env.action_space.sample())
+            obs, reward, done, _ = env.step(env.action_space.sample())
+            print(reward)
             e = time()
             print('time for one iter:', e-s)
