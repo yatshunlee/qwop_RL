@@ -16,7 +16,7 @@ class qwopEnv(Env):
     ACTIONS_SPACE = {
         0: 'Q', 1: 'W', 2: 'O', 3: 'P',
         4: 'QW', 5: 'QO', 6: 'QP', 7: 'WO',
-        8: 'WP', 9: 'OP' # , 10: ''
+        8: 'WP', 9: 'OP', 10: ''
     }
 
     def __init__(self):
@@ -62,12 +62,17 @@ class qwopEnv(Env):
         :return: True if terminate
         """
 
-        isEnd, isQ = False, True
+        isEnd = False
+
         while not isEnd:
-            action = self.ACTIONS_SPACE[0] if isQ else self.ACTIONS_SPACE[1]
-            self.press_key(action,PRESS_DURATION=3)
+            body_state = self.get_variable('globalbodystate')
+            left = body_state['leftFoot']['position_x']
+            right = body_state['rightFoot']['position_x']
+
+            action = self.ACTIONS_SPACE[1] if left < right else self.ACTIONS_SPACE[0]
+
+            self.press_key(action, 2)
             isEnd = pyautogui.locateOnScreen('game/end_screen.png', confidence=0.2)
-            isQ = False
 
         return True
 
@@ -92,10 +97,10 @@ class qwopEnv(Env):
         self.previous_score = game_state['score']
 
         head_angle = body_state['head']['angle']
-        r2 = 1 / (1 - abs(head_angle))
+        r2 = abs(head_angle)
 
         time = game_state['scoreTime']
-        reward = r1**3
+        reward = r1**3 - r2
 
         if time > self.MAX_DURATION:
             if self.terminate():
