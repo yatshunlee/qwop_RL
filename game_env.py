@@ -16,7 +16,7 @@ class qwopEnv(Env):
     ACTIONS_SPACE = {
         0: 'Q', 1: 'W', 2: 'O', 3: 'P',
         4: 'QW', 5: 'QO', 6: 'QP', 7: 'WO',
-        8: 'WP', 9: 'OP', 10: ''
+        8: 'WP', 9: 'OP' # , 10: ''
     }
 
     def __init__(self):
@@ -159,7 +159,7 @@ class qwopEnv(Env):
         pass
 
     def close(self):
-        pass
+        self.driver.close()
 
 if __name__ == '__main__':
     env = qwopEnv()
