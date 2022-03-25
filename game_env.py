@@ -93,14 +93,15 @@ class qwopEnv(Env):
         game_state = self.get_variable('globalgamestate')
         body_state = self.get_variable('globalbodystate')
 
-        r1 = 10 * (game_state['score'] - self.previous_score)
-        self.previous_score = game_state['score']
+        current_score = game_state['score']
+        r1 = 10 * (current_score - self.previous_score)
+        self.previous_score = current_score
 
         head_angle = body_state['head']['angle']
         r2 = abs(head_angle)
 
         time = game_state['scoreTime']
-        reward = r1**3 - r2
+        reward = max(0, r1)**0.5 - r2 + 2**(current_score/10)
 
         if time > self.MAX_DURATION:
             if self.terminate():
