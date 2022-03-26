@@ -4,7 +4,7 @@ from stable_baselines3 import DQN
 if __name__ == '__main__':
     env = qwopEnv()
 
-    model = DQN.load("qwop")
+    model = DQN.load("qwop3")
 
     obs = env.reset()
     while True:
