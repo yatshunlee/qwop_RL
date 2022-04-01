@@ -1,262 +1,261 @@
 import torch
-import numpy as np
 from torch import nn
-import random
-import torch.nn.functional as F
-import collections
-from torch.optim.lr_scheduler import StepLR
-
-from game_env import qwopEnv
-
-"""
-Implementation of Double DQN for gym environments with discrete action space.
-"""
+from torch.utils.tensorboard import SummaryWriter
+import numpy as np
+from pathlib import Path
+import random, copy, collections, datetime, os
+from game_env_2t import qwopEnv
+from logger import MetricLogger
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-"""
-The Q-Network has as input a state s and outputs the state-action values q(s,a_1), ..., q(s,a_n) for all n actions.
-"""
-class QNetwork(nn.Module):
+class DDQN(nn.Module):
+    """
+    The Double Deep Q-Network has as input a state s and
+    outputs the state-action values q(s,a_1), ..., q(s,a_n) for all n actions.
+    :param: state_dim: for input layer
+    :param: hidden_dim: for every hidden layer
+    :param: action_dim: for output layer
+    """
     def __init__(self, action_dim, state_dim, hidden_dim):
-        super(QNetwork, self).__init__()
+        super().__init__()
 
-        self.fc_1 = nn.Linear(state_dim, hidden_dim)
-        self.fc_2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc_3 = nn.Linear(hidden_dim, action_dim)
+        self.online = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.LeakyReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LeakyReLU(),
+            nn.Linear(hidden_dim, action_dim)
+        )
 
-    def forward(self, inp):
+        self.target = copy.deepcopy(self.online)
 
-        x1 = F.leaky_relu(self.fc_1(inp))
-        x1 = F.leaky_relu(self.fc_2(x1))
-        x1 = self.fc_3(x1)
+        # Q_target parameters are frozen.
+        for p in self.target.parameters():
+            p.requires_grad = False
 
-        return x1
-
-
-"""
-If the observations are images we use CNNs.
-"""
-class QNetworkCNN(nn.Module):
-    def __init__(self, action_dim):
-        super(QNetworkCNN, self).__init__()
-
-        self.conv_1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)
-        self.conv_2 = nn.Conv2d(32, 64, kernel_size=4, stride=3)
-        self.conv_3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
-        self.fc_1 = nn.Linear(8960, 512)
-        self.fc_2 = nn.Linear(512, action_dim)
-
-    def forward(self, inp):
-        inp = inp.view((1, 3, 210, 160))
-        x1 = F.relu(self.conv_1(inp))
-        x1 = F.relu(self.conv_2(x1))
-        x1 = F.relu(self.conv_3(x1))
-        x1 = torch.flatten(x1, 1)
-        x1 = F.leaky_relu(self.fc_1(x1))
-        x1 = self.fc_2(x1)
-
-        return x1
-
-
-"""
-memory to save the state, action, reward sequence from the current episode. 
-"""
-class Memory:
-    def __init__(self, len):
-        self.rewards = collections.deque(maxlen=len)
-        self.state = collections.deque(maxlen=len)
-        self.action = collections.deque(maxlen=len)
-        self.is_done = collections.deque(maxlen=len)
-
-    def update(self, state, action, reward, done):
-        # if the episode is finished we do not save to new state. Otherwise we have more states per episode than rewards
-        # and actions whcih leads to a mismatch when we sample from memory.
-        if not done:
-            self.state.append(state)
-        self.action.append(action)
-        self.rewards.append(reward)
-        self.is_done.append(done)
-
-    def sample(self, batch_size):
+    def forward(self, input, model):
         """
-        sample "batch_size" many (state, action, reward, next state, is_done) datapoints.
+        When doing update by forward, it takes:
+        :param: input: all state of each observation
+        :param: model: online or target
+        :return: Q_values of all actions given state from online/target
         """
-        n = len(self.is_done)
-        idx = random.sample(range(0, n-1), batch_size)
+        if model == "online":
+            return self.online(input)
+        elif model == "target":
+            return self.target(input)
 
-        return torch.Tensor(self.state)[idx].to(device), torch.LongTensor(self.action)[idx].to(device), \
-               torch.Tensor(self.state)[1+np.array(idx)].to(device), torch.Tensor(self.rewards)[idx].to(device), \
-               torch.Tensor(self.is_done)[idx].to(device)
+class Rabbit:
+    def __init__(self, state_dim, action_dim, hidden_dim, save_dir):
+        self.log_interval = 4
 
-    def reset(self):
-        self.rewards.clear()
-        self.state.clear()
-        self.action.clear()
-        self.is_done.clear()
+        # FOR ACT
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.hidden_dim = hidden_dim
+        self.save_dir = save_dir
 
+        self.net = DDQN(self.state_dim,
+                        self.action_dim,
+                        self.hidden_dim).to(device=device)
 
-def select_action(model, env, state, eps):
-    state = torch.Tensor(state).to(device)
-    with torch.no_grad():
-        values = model(state)
+        # training parameter
+        self.exploration_rate = 1
+        self.exploration_rate_decay = 0.999999
+        self.exploration_rate_min = 0.05
+        self.current_step = 0
 
-    # select a random action wih probability eps
-    if random.random() <= eps:
-        action = np.random.randint(0, env.action_space.n)
-    else:
-        action = np.argmax(values.cpu().numpy())
+        self.save_net_every = 5e5 # no. of exp between saving network
 
-    return action
+        # FOR CACHE AND RECALL
+        self.memory = collections.deque(maxlen=100000) # truncated list w/ maxlen
+        self.batch_size = 32
 
+        # FOR LEARN
+        self.burnin = 1e4 # min. experiences before training (learning start)
+        self.learn_every = 3 # update every learn_every of experiences
+        self.sync_every = 1e4 # synv every sync_every of experiences
+        # - td_estimate and td_target
+        self.gamma = 0.99
+        # - update_Q_online
+        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=0.00025)
+        self.loss_fn = torch.nn.SmoothL1Loss()
 
-def train(batch_size, current, target, optim, memory, gamma):
+    def act(self, state):
+        """
+        Given a state, choose an epsilon-greedy action and
+        update the Q value.
 
-    states, actions, next_states, rewards, is_done = memory.sample(batch_size)
+        :param: state(body_state), dimension = (state_dim)
+        :return: action_idx for rabbit to take action
+        """
 
-    q_values = current(states)
+        # EXPLORE
+        if np.random.rand() < self.exploration_rate:
+            action_idx = np.random.randint(self.action_dim)
+            # env.action_space.sample()
+        # EXPLOIT
+        else:
+            state = state.__array__()
+            state = torch.tensor(state).to(device=device)
+            state = state.unsqueeze(0)
 
-    next_q_values = current(next_states)
-    next_q_state_values = target(next_states)
+            # argmax from online
+            action_values = self.net(state, 'online')
+            action_idx = torch.argmax(action_values, axis=1).item()
 
-    q_value = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
-    next_q_value = next_q_state_values.gather(1, torch.max(next_q_values, 1)[1].unsqueeze(1)).squeeze(1)
-    expected_q_value = rewards + gamma * next_q_value * (1 - is_done)
+        # decrease the exploration rate until the min.
+        self.exploration_rate *= self.exploration_rate_decay
+        self.exploration_rate = max(self.exploration_rate,
+                                    self.exploration_rate_min)
 
-    loss = (q_value - expected_q_value.detach()).pow(2).mean()
+        self.current_step += 1
+        return action_idx
 
-    optim.zero_grad()
-    loss.backward()
-    optim.step()
+    def cache(self, state, action, reward, next_state, done):
+        """
+        Store the experience to self.memory (replay buffer)
+        Experience contains of following params
+        """
+        state = state.__array__()
+        next_state = next_state.__array__()
 
+        state = torch.tensor(state).to(device=device)
+        next_state = torch.tensor(next_state).to(device=device)
+        action = torch.tensor([action]).to(device=device)
+        reward = torch.tensor([reward]).to(device=device)
+        done = torch.tensor([done]).to(device=device)
 
-def evaluate(Qmodel, env, repeats):
-    """
-    Runs a greedy policy with respect to the current Q-Network for "repeats" many episodes. Returns the average
-    episode reward.
-    """
-    Qmodel.eval()
-    perform = 0
-    for _ in range(repeats):
-        state = env.reset()
-        done = False
-        while not done:
-            state = torch.Tensor(state).to(device)
-            with torch.no_grad():
-                values = Qmodel(state)
-            action = np.argmax(values.cpu().numpy())
-            state, reward, done, _ = env.step(action)
-            perform += reward
-    Qmodel.train()
-    return perform/repeats
+        experience = (state, next_state, action, reward, done)
+        self.memory.append(experience)
 
+    def recall(self):
+        """Retrieve a batch of experiences from memory"""
+        batch = random.sample(self.memory, self.batch_size)
+        state, next_state, action, reward, done = map(torch.stack, zip(*batch))
+        return state, next_state, action.squeeze(),\
+               reward.squeeze(), done.squeeze()
 
-def update_parameters(current_model, target_model):
-    target_model.load_state_dict(current_model.state_dict())
+    def td_estimate(self, state, action):
+        """Return TD estimate"""
+        # TD_estimate = Q*_online(s,a)
+        current_Q = self.net(state, model='online')[
+            np.arange(0, self.batch_size), action
+        ]
+        return current_Q
 
-def main(env, gamma=0.99, lr=1e-3, min_episodes=20, eps=1, eps_decay=0.995, eps_min=0.01, update_step=10,
-         batch_size=64, update_repeats=50, num_episodes=3000, seed=42, max_memory_size=50000, lr_gamma=0.9, lr_step=100,
-         measure_step=100, measure_repeats=100, hidden_dim=64, cnn=False, horizon=np.inf, render=True, render_step=50):
-    """
-    :param env: customized gym environment
-    :param gamma: reward discount factor
-    :param lr: learning rate for the Q-Network
-    :param min_episodes: we wait "min_episodes" many episodes in order to aggregate enough data before starting to train
-    :param eps: probability to take a random action during training
-    :param eps_decay: after every episode "eps" is multiplied by "eps_decay" to reduces exploration over time
-    :param eps_min: minimal value of "eps"
-    :param update_step: after "update_step" many episodes the Q-Network is trained "update_repeats" many times with a
-    batch of size "batch_size" from the memory.
-    :param batch_size: see above
-    :param update_repeats: see above
-    :param num_episodes: the number of episodes played in total
-    :param seed: random seed for reproducibility
-    :param max_memory_size: size of the replay memory
-    :param lr_gamma: learning rate decay for the Q-Network
-    :param lr_step: every "lr_step" episodes we decay the learning rate
-    :param measure_step: every "measure_step" episode the performance is measured
-    :param measure_repeats: the amount of episodes played in to asses performance
-    :param hidden_dim: hidden dimensions for the Q_network
-    :param cnn: set to "True" when using environments with image observations like "Pong-v0"
-    :param horizon: number of steps taken in the environment before terminating the episode (prevents very long episodes)
-    :param render: if "True" renders the environment every "render_step" episodes
-    :param render_step: see above
-    :return: the trained Q-Network and the measured performances
-    """
-    torch.manual_seed(seed)
-    env.seed(seed)
+    # Use the decorator disable gradient calculation of td_target
+    @torch.no_grad()
+    def td_target(self, next_state, reward, done):
+        """Return TD target"""
+        # a = argmax_a (Q_online(s',a))
+        next_state_Q = self.net(next_state, model='online')
+        best_action = torch.argmax(next_state_Q, axis=1)
 
-    if cnn:
-        Q_1 = QNetworkCNN(action_dim=env.action_space.n).to(device)
-        Q_2 = QNetworkCNN(action_dim=env.action_space.n).to(device)
-    else:
-        Q_1 = QNetwork(action_dim=env.action_space.n, state_dim=env.observation_space.shape[0],
-                                        hidden_dim=hidden_dim).to(device)
-        Q_2 = QNetwork(action_dim=env.action_space.n, state_dim=env.observation_space.shape[0],
-                                        hidden_dim=hidden_dim).to(device)
-    # transfer parameters from Q_1 to Q_2
-    update_parameters(Q_1, Q_2)
+        next_Q = self.net(next_state, model='target')[
+            np.arange(0, self.batch_size), best_action
+        ]
+        return (reward + (1 - done.float()) * self.gamma * next_Q).float()
 
-    # we only train Q_1
-    for param in Q_2.parameters():
-        param.requires_grad = False
+    def update_Q_online(self, td_estimate, td_target):
+        """
+        Backpropagate the loss to update the parameters.
+        Update for parameter_online:
+        parameter_online <- parameter_online + alpha * d/dtheta(TD_est - TD_target)
+        :return loss: the average of batch losses
+        """
+        loss = self.loss_fn(td_estimate, td_target)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        return loss.item()
 
-    optimizer = torch.optim.Adam(Q_1.parameters(), lr=lr)
-    scheduler = StepLR(optimizer, step_size=lr_step, gamma=lr_gamma)
+    def sync_Q_target(self):
+        """Periodically copy parameter_online to parameter_target."""
+        self.net.target.load_state_dict(self.net.online.state_dict())
 
-    memory = Memory(max_memory_size)
-    performance = []
+    def save(self):
+        """Save checkpoint"""
+        num = int(self.current_step // self.save_net_every)
+        save_path = (
+            self.save_dir / f"qwop_ddqn_{num}.chkpt"
+        )
+        torch.save(
+            dict(model=self.net_state_dict(), exploration_rate=self.exploration_rate),
+            save_path
+        )
+        print(f"Saved to {save_path} at step {self.current_step}.")
 
-    for episode in range(num_episodes):
-        # display the performance
-        if episode % measure_step == 0:
-            performance.append([episode, evaluate(Q_1, env, measure_repeats)])
-            print("Episode: ", episode)
-            print("rewards: ", performance[-1][1])
-            print("lr: ", scheduler.get_lr()[0])
-            print("eps: ", eps)
+    def learn(self):
+        # sync Q target every sync_every steps
+        if self.current_step % self.sync_every == 0:
+            self.sync_Q_target()
+        # save current net every save_net_every steps
+        if self.current_step % self.save_net_every == 0:
+            self.save()
+        # do nothing before burning in
+        if self.current_step < self.burnin:
+            return None, None
+        # learn every learn_every steps
+        if self.current_step % self.learn_every != 0:
+            return None, None
+        # log interval
+        if self.current_step % self.log_interval == 0:
+            print('current timestep:', self.current_step)
 
-        state = env.reset()
-        memory.state.append(state)
+        # sample from memory
+        state, next_state, action, reward, done = self.recall()
 
-        done = False
-        i = 0
-        while not done:
-            print(done)
-            i += 1
-            action = select_action(Q_2, env, state, eps)
-            state, reward, done, _ = env.step(action)
+        # get TD estimate
+        td_est = self.td_estimate(state, action)
+        # get TD target
+        td_tgt = self.td_target(next_state, reward, done)
+        # backpropagate loss through Q_online
+        loss = self.update_Q_online(td_est, td_tgt)
 
-            if i > horizon:
-                done = True
-
-            # render the environment if render == True
-            if render and episode % render_step == 0:
-                env.render()
-
-            # save state, action, reward sequence
-            memory.update(state, action, reward, done)
-
-        if episode >= min_episodes and episode % update_step == 0:
-            for _ in range(update_repeats):
-                train(batch_size, Q_1, Q_2, optimizer, memory, gamma)
-
-            # transfer new parameter from Q_1 to Q_2
-            update_parameters(Q_1, Q_2)
-
-        # update learning rate and eps
-        scheduler.step()
-        eps = max(eps*eps_decay, eps_min)
-
-    return Q_1, performance
-
+        return (td_est.mean().item(), loss)
 
 if __name__ == '__main__':
-    PATH = 'Q1.pth'
+    env = qwopEnv()
+    env.reset()
 
-    Q_1, performance = main(env = qwopEnv(),
-                            measure_repeats=20,
-                            num_episodes=60,
-                            min_episodes=5,)
-    torch.save(Q_1.state_dict(), PATH)
-    print(Q_1, performance)
+    save_dir = Path("checkpoints") / datetime.datetime.now().strftime(
+        "%Y-%m-%dT%H-%M-%S"
+    )
+    save_dir.mkdir(parents=True)
+
+    rabbit = Rabbit(
+        state_dim=env.observation_space.shape[0],
+        action_dim=env.action_space.n,
+        hidden_dim=64,
+        save_dir=save_dir,
+    )
+
+    logger = MetricLogger(save_dir=save_dir)
+
+    episodes = 1000
+    for ep in range(episodes):
+        state = env.reset()
+
+        while True:
+            # get action based on state from agent
+            action = rabbit.act(state)
+            # performs action in env
+            next_state, reward, done, info = env.step(action)
+            # remember
+            rabbit.cache(state, action, reward, next_state, done)
+            # learn
+            q, loss = rabbit.learn()
+            # logging
+            logger.log_step(reward, loss, q)
+            # update state
+            state = next_state
+            # check if the game end
+            if done:
+                break
+
+        logger.log_episode()
+
+        if ep % 20 == 0:
+            logger.record(episode=ep, epsilon=rabbit.exploration_rate, step=rabbit.curr_step)

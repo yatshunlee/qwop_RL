@@ -98,55 +98,54 @@ class qwopEnv(Env):
         # progress in x direction
         current_score = body_state['torso']['position_x']
 
-        if (current_score == self.previous_score):
+        if (current_score <= self.previous_score):
             self.no_moving_count += 1
         else:
             self.no_moving_count = 0
 
-        r1 = 3 * (current_score - self.previous_score) if self.scoreTime > 0 else 0
-        r1 -= 0.01 * (self.no_moving_count-3) if self.no_moving_count >= 5 else 0
+        r1 = 2  if (current_score - self.previous_score > 0) else 0
+        r1 -= 0.1 * (self.no_moving_count-10) if self.no_moving_count >= 10 else 0
         self.previous_score = current_score
 
-        # speed of head drop
-        current_head_y = body_state['head']['position_y']
-        r2 = -3 * (current_head_y - self.previous_head_y) if self.scoreTime > 0 else 0
-        r2 = min(r2, 0)
-        self.previous_head_y = current_head_y
+        r2 = 0
 
         # foot in correct position
-        if body_state['rightFoot']['position_x'] > body_state['leftFoot']['position_x']:
-            condition1 = (body_state['rightFoot']['position_y'] >= 8)
+        rfoot_x, lfoot_x = body_state['rightFoot']['position_x'], body_state['leftFoot']['position_x']
+        rfoot_y, lfoot_y = body_state['rightFoot']['position_y'], body_state['leftFoot']['position_y']
+        if rfoot_x > lfoot_x:
+            condition1 = (rfoot_y >= 8)
             condition2 = (abs(body_state['rightFoot']['angle']) < 0.02)
         else:
-            condition1 = (body_state['leftFoot']['position_y'] >= 8)
+            condition1 = (lfoot_y >= 8)
             condition2 = (abs(body_state['leftFoot']['angle']) < 0.02)
-        r3 = condition1 * condition2 * 0.05
 
-        info = {} # {'r':body_state['rightFoot'], 'l':body_state['leftFoot']}
+        r3 = condition1 * condition2 * 0.05
+        # r3 = 0.5 if abs(rfoot_x - lfoot_x) > 5 and max(rfoot_y, lfoot_y) > 5 else 0
+
+        # info = game_state # {'r':body_state['rightFoot'], 'l':body_state['leftFoot']}
 
         self.scoreTime = game_state['scoreTime']
 
         if self.scoreTime > self.MAX_DURATION:
-            if self.terminate():
-                self.gameover = done = True
+            self.gameover = done = True
         elif (game_state['gameEnded'] > 0) or (game_state['gameOver']) > 0:
             self.gameover = done = True
         else:
             self.gameover = done = False
 
-        r4 = self.gameover * -0.01 * (100 - current_score)**2
+        reward = r1 + r2 + r3
 
-        # print('r1:',np.round(r1,2),'r2:',np.round(r2,2),'r3:',np.round(r3,2),'r4:',np.round(r4,2))
-        reward = r1 + r2 + r3 + r4
-        print(reward)
+        torso_x = body_state['torso']['position_x']
 
         states = []
         for body_part in body_state.values():
             for v in body_part.values():
+                if 'position_x' in body_part:
+                    v -= torso_x
                 states.append(v)
         states = np.array(states)
 
-        return states, reward, done, info # {}
+        return states, reward, done, {}
 
     def step(self, i):
         """
@@ -174,7 +173,7 @@ class qwopEnv(Env):
         :return: states in self.get_state() only
         """
 
-        self.press_key(['space'], self.PRESS_DURATION)
+        self.press_key(['r'], self.PRESS_DURATION)
 
         # Initialize
         self.gameover = False
@@ -195,17 +194,8 @@ class qwopEnv(Env):
 
 if __name__ == '__main__':
     env = qwopEnv()
-    s = time()
-    count = 0
     while True:
         if env.gameover:
             env.reset()
-            s = time()
         else:
-            # return obs, reward, done, info from step function
-            obs, reward, done, _ = env.step(10) # env.action_space.sample())
-            e = time()
-            if count%10==0:
-                print('time for one iter:', e-s)
-                # print('reward:', reward)
-            count+=1
+            obs, reward, done, _ = env.step(env.action_space.sample())
