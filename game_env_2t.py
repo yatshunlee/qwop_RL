@@ -3,7 +3,7 @@ import numpy as np
 from time import sleep, time
 from selenium import webdriver
 from gym import Env, spaces
-
+import math
 class qwopEnv(Env):
     """
     Custom Environment that follows gym interface.
@@ -18,7 +18,7 @@ class qwopEnv(Env):
         4: 'qw', 5: 'qo', 6: 'qp', 7: 'wo',
         8: 'wp', 9: 'op', 10: ''
     }
-    time_space = { 0 : 0.15, 1: 0.4}
+    time_space = { 0 : 0.05, 1: 0.15 , 2: 0.25}
     k=0
     l = dict()
     for i in key_space:
@@ -51,6 +51,9 @@ class qwopEnv(Env):
         self.previous_torso_y = 0
         self.game_start()
         self.MAX_DURATION = 80 # max seconds per one round
+        self.rewardp = 0
+        self.r2d =0
+        self.pos = 0
     def game_start(self):
         """
         Start the game on a browser
@@ -79,15 +82,16 @@ class qwopEnv(Env):
     def get_state(self):
         """
         Retrieve game states as well as body states from JS adaptor.
-        :return: obs, reward, done, infoQ
+        :return: obs, reward, done, info
         """
         
        
-        alpha = 0.1 # weigh for velocity
-        self.MAX_DURATION = 60
+        alpha = 0.18 # weigh for velocity
+        self.MAX_DURATION = 600
         game_state = self.get_variable('globalgamestate')
         body_state = self.get_variable('globalbodystate')
         torso_x = body_state['torso']['position_x']
+        self.pos = torso_x
         torso_y = body_state['torso']['position_y']   
         torso_a = body_state['torso']['angle']
         time = game_state['scoreTime']
@@ -96,45 +100,65 @@ class qwopEnv(Env):
         else:
             self.gameover = done = False
         
-        self.mean_speed = alpha * (game_state['score'] - self.previous_score) + (1-alpha ) * self.mean_speed
+        t = (game_state['scoreTime']-self.previous_time)
+        self.mean_speed = (alpha* t )* ((game_state['score'] - self.previous_score)/(1)) + (1-(alpha*t) ) * self.mean_speed
         
+        standardize = 1
+        if standardize:
+            for body_part in body_state.items():
+                if 'position_x' in body_part[1]:
+                   body_part[1]['position_x'] = body_part[1]['position_x'] -  body_state['torso']['position_x']
+                   #print("part: {},pos : {}". format(body_part[0],body_part[1]['position_x']))
+      
         states = []
         for body_part in body_state.values():
             for v in body_part.values():
                 states.append(v)
         states = np.array(states)
+        
+
         #g = game_state
         #print(body_state)
-        #print(self.mean_speed)
+        #print(states)
+       #print('head:{:4f},right:{:4f},left:{:4f}'.format(body_state['head']['position_x'],body_state['rightFoot']['position_x'],body_state['leftFoot']['position_x']))
+        #print('head:{:4f},right:{:4f},left:{:4f}'.format(body_state['head']['position_x'],body_state['rightCalf']['position_x'],body_state['leftCalf']['position_x']))
+        #print(self.mean_speed)rightCalf
         #self.PRESS_DURATION = 0.15 # action duration
         # Get reward
 
-        r1 =  4 * max(game_state['score'] +0.4,0) ** 2  # initial distance travelled
-       # r2 = 0 #max( time,10) /10     # penalize for staying
+        r1 = 4 * max(game_state['score'] +1.5,0) ** 2  # initial distance travelled
+        r2 = ((body_state['head']['position_x']-min(body_state['rightFoot']['position_x'],body_state['leftFoot']['position_x']))/abs(body_state['rightFoot']['position_x']-body_state['leftFoot']['position_x']))
+        #print(r2)
        # r3 =  0.5 * max(game_state['score'] - self.previous_score, 0)   ## foward
-        r4 = -torso_y/6  ## reward for standing up
-        r5 =  max(abs((body_state['joints']['leftKnee'] + body_state['joints']['rightKnee'])/2) - 0.6,0) ## penalty for knee angle
+        r4 = -torso_y/5  ## reward for standing up
+   #     r5 =  max(abs((body_state['joints']['leftKnee'] + body_state['joints']['rightKnee'])/2) - 0.6,0) ## penalty for knee angle
         if self.mean_speed>0 :
-            r6 =  3* self.mean_speed ** 1  #aveage velocity
+            r6 =  2* self.mean_speed ** 2  #aveage velocity
         else :
-            r6 = -3* (-self.mean_speed) ** 1
-        r7 = max(abs((torso_a+1.45))-0.7,0)  #penalty for too big angle
+            r6 = -2* (-self.mean_speed) ** 2
+   #     r7 = max(abs((torso_a+1.45))-0.7,0)  #penalty for too big angle
         
         if (game_state['gameEnded'] == 0) :
-            reward =  r1 * (r6+0.00) * ( 1 + max(min(r4,0.6),0)) * (1-min(r5*0.3,1))*(1-min(r7*2,1)) 
+            if (self.mean_speed<0) and (r2 < 0) :
+                reward =  - r1 *(1-max(min((abs(r2)-0.5),1.5),0) )* (r6) * ( 1 + max(min(r4,1.5),0))# * (1-min(r5*0.3,1))*(1-min(r7*2,1)) 
+            else:
+                reward =  r1 *(1-max(min((abs(r2)-0.5),1.5),0) )* (r6) * ( 1 + max(min(r4,1.5),0)) #* (1-min(r5*0.3,1))*(1-min(r7*2,1)) 
         else :
-            reward = -2
+            reward = -2 * abs(self.r2d)
+        
+        reward = math.log(max(0.2+reward,0.0001))- math.log(0.0001)
        # print("angle:{}".format(torso_a))
         #print("reward:{}, r1:{} , r5: {:4f}, r7: {:4f}".format(reward,r1,r5,r7))
        # print("reward:{:4f}, angle:{:4f} ".format(reward,torso_a))
         #print("reward:{:4f} ".format(reward))
         #print("left: {:4f}".format(body_state['joints']['leftKnee']))
-       # print("right: {:4f}".format(body_state['joints']['rightKnee']))
+        #print("time:{:4f}, previous time:{:4f}, diff:{:4f}, speed:{:4f}".format(game_state['scoreTime'],self.previous_time,game_state['scoreTime']-self.previous_time,self.mean_speed))
         self.previous_torso_x = torso_x
         self.previous_torso_y = torso_y
         self.previous_score = game_state['score']
         self.previous_time = game_state['scoreTime']
-        
+        self.rewardp = reward
+        self.r2d = r2
         return states, reward, done, {}
 
     def step(self, i):
@@ -152,7 +176,7 @@ class qwopEnv(Env):
         for key in self.ACTIONS_SPACE[i].items():
             for x in key[1][0]:
                 pyautogui.keyUp(x)
-            print("action : {}".format((key[1])))
+            print("reward :{:4f}, action :{}, speed: {:4f}, x : {:4f} ".format(self.rewardp,key[1],self.mean_speed,self.pos))
         return self.get_state()
 
         
