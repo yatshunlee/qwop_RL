@@ -3,7 +3,7 @@ from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 from pathlib import Path
-import random, copy, collections, datetime, os
+import random, copy, collections, datetime, os, time
 from game_env import qwopEnv
 from logger import MetricLogger
 
@@ -41,6 +41,7 @@ class DDQN(nn.Module):
         :param: model: online or target
         :return: Q_values of all actions given state from online/target
         """
+
         if model == "online":
             return self.online(input)
         elif model == "target":
@@ -49,18 +50,18 @@ class DDQN(nn.Module):
 class Rabbit:
     def __init__(self, state_dim, action_dim, hidden_dim, save_dir):
         self.log_interval = 4
+        self.save_dir = save_dir
 
         # FOR ACT
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.hidden_dim = hidden_dim
-        self.save_dir = save_dir
 
-        self.net = DDQN(self.state_dim,
-                        self.action_dim,
+        self.net = DDQN(self.action_dim,
+                        self.state_dim,
                         self.hidden_dim).to(device=device)
 
-        # training parameter
+        # - training parameter
         self.exploration_rate = 1
         self.exploration_rate_decay = 0.999999
         self.exploration_rate_min = 0.05
@@ -73,7 +74,7 @@ class Rabbit:
         self.batch_size = 32
 
         # FOR LEARN
-        self.burnin = 1e4 # min. experiences before training (learning start)
+        self.burnin = 5e2 # min. experiences before training (learning start)
         self.learn_every = 3 # update every learn_every of experiences
         self.sync_every = 1e4 # synv every sync_every of experiences
         # - td_estimate and td_target
@@ -97,7 +98,8 @@ class Rabbit:
         # EXPLOIT
         else:
             state = state.__array__()
-            state = torch.tensor(state).to(device=device)
+            state = torch.tensor(state,
+                                 dtype=torch.float32).to(device=device)
             state = state.unsqueeze(0)
 
             # argmax from online
@@ -120,10 +122,13 @@ class Rabbit:
         state = state.__array__()
         next_state = next_state.__array__()
 
-        state = torch.tensor(state).to(device=device)
-        next_state = torch.tensor(next_state).to(device=device)
+        state = torch.tensor(state,
+                             dtype=torch.float32).to(device=device)
+        next_state = torch.tensor(next_state,
+                                  dtype=torch.float32).to(device=device)
         action = torch.tensor([action]).to(device=device)
-        reward = torch.tensor([reward]).to(device=device)
+        reward = torch.tensor([reward],
+                              dtype=torch.float32).to(device=device)
         done = torch.tensor([done]).to(device=device)
 
         experience = (state, next_state, action, reward, done)
@@ -228,13 +233,15 @@ if __name__ == '__main__':
     rabbit = Rabbit(
         state_dim=env.observation_space.shape[0],
         action_dim=env.action_space.n,
-        hidden_dim=64,
+        hidden_dim=64*2,
         save_dir=save_dir,
     )
 
     logger = MetricLogger(save_dir=save_dir)
 
-    episodes = 1000
+    episodes = 3000
+    s = time.time()
+
     for ep in range(episodes):
         state = env.reset()
 
@@ -259,3 +266,5 @@ if __name__ == '__main__':
 
         if ep % 20 == 0:
             logger.record(episode=ep, epsilon=rabbit.exploration_rate, step=rabbit.current_step)
+
+    print('It took',time.time()-s,'to complete 1000 episodes')
