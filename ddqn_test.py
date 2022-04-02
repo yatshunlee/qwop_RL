@@ -1,8 +1,8 @@
+import gym
 import torch
 import numpy as np
 from ddqn_train import DDQN
-from game_env_2t import qwopEnv
-import gym
+from game_env import qwopEnv
 
 if __name__ == '__main__':
     PATH = None
@@ -21,16 +21,18 @@ if __name__ == '__main__':
     state = env.reset()
     for i_episode in range(10):
         observation = env.reset()
+
         while not env.gameover:
             env.render()
             state = torch.Tensor(state).to(device)
+
             with torch.no_grad():
                 values = model(state,"online")
-                # values = model(state, "target")
+
             action = np.argmax(values.cpu().numpy())
             observation, reward, done, info = env.step(action)
-            total+=reward
+
             if done:
-                print(reward)
                 break
+
     env.close()

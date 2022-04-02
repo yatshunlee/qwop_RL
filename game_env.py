@@ -3,6 +3,8 @@ import numpy as np
 from time import sleep, time
 from selenium import webdriver
 from gym import Env, spaces
+import math
+
 
 class qwopEnv(Env):
     """
@@ -10,14 +12,26 @@ class qwopEnv(Env):
     """
 
     # Game settings
-    PRESS_DURATION = 0.1 # action duration
-    MAX_DURATION = 90 # max seconds per one round
-    NUM_STATES = 71 # total num of body states
-    ACTIONS_SPACE = {
-        0: 'Q', 1: 'W', 2: 'O', 3: 'P',
-        4: 'QW', 5: 'QO', 6: 'QP', 7: 'WO',
-        8: 'WP', 9: 'OP', 10: ''
+
+    NUM_STATES = 71  # total num of body states
+
+    key_space = {
+        0: 'q', 1: 'w', 2: 'o', 3: 'p',
+        4: 'qw', 5: 'qo', 6: 'qp', 7: 'wo',
+        8: 'wp', 9: 'op', 10: ''
     }
+    time_space = {0: 0.05, 1: 0.15, 2: 0.25}
+
+    count = 0
+    key_time_pairs = dict()
+    for i in key_space:
+        for j in time_space:
+            key_time_pairs[count] = {
+                count: [key_space[i], time_space[j]]
+            }
+            count += 1
+
+    ACTIONS_SPACE = key_time_pairs
 
     def __init__(self):
         super(qwopEnv, self).__init__()
@@ -33,11 +47,16 @@ class qwopEnv(Env):
         self.gameover = False
         self.score = 0.
         self.scoreTime = 0.
-        self.previous_score = 0.
-        self.previous_head_y = 0.
-        self.no_moving_count = 0
-
+        self.previous_score = 0
+        self.mean_speed = 0
+        self.previous_time = 0
+        self.previous_torso_x = 0
+        self.previous_torso_y = 0
         self.game_start()
+        self.MAX_DURATION = 80  # max seconds per one round
+        self.rewardp = 0
+        self.r2d = 0
+        self.pos = 0
 
     def game_start(self):
         """
@@ -52,33 +71,12 @@ class qwopEnv(Env):
         # locate the game screen and auto click
         x, y, w, h = pyautogui.locateOnScreen(
             'game/start_screen.png',
-            confidence=0.2
+            confidence=0.7
         )
-        pyautogui.click(x+w//2, y+h//2)
+        pyautogui.click(x + w // 2, y + h // 2)
         sleep(.2)
 
-    def terminate(self):
-        """
-        When stuck in certain position for an infinitely long period
-        (> PRESS_DURATION second), terminate it.
-        :return: True if terminate
-        """
-
-        isEnd = False
-
-        while not isEnd:
-            body_state = self.get_variable('globalbodystate')
-            left = body_state['leftFoot']['position_x']
-            right = body_state['rightFoot']['position_x']
-
-            action = self.ACTIONS_SPACE[1] if left < right else self.ACTIONS_SPACE[0]
-
-            self.press_key(action, 2)
-            isEnd = pyautogui.locateOnScreen('game/end_screen.png', confidence=0.2)
-
-        return True
-
-    def get_variable(self,var_name):
+    def get_variable(self, var_name):
         """
         Retrieve variables from localhost (game)
         :return: specific variable
@@ -92,58 +90,66 @@ class qwopEnv(Env):
         :return: obs, reward, done, info
         """
 
+        alpha = 0.18  # weigh for velocity
+        self.MAX_DURATION = 600
         game_state = self.get_variable('globalgamestate')
         body_state = self.get_variable('globalbodystate')
-
-        # progress in x direction
-        current_score = body_state['torso']['position_x']
-
-        if (current_score <= self.previous_score):
-            self.no_moving_count += 1
-        else:
-            self.no_moving_count = 0
-
-        r1 = 2  if (current_score - self.previous_score > 0) else 0
-        r1 -= 0.1 * (self.no_moving_count-10) if self.no_moving_count >= 10 else 0
-        self.previous_score = current_score
-
-        r2 = 0
-
-        # foot in correct position
-        rfoot_x, lfoot_x = body_state['rightFoot']['position_x'], body_state['leftFoot']['position_x']
-        rfoot_y, lfoot_y = body_state['rightFoot']['position_y'], body_state['leftFoot']['position_y']
-        if rfoot_x > lfoot_x:
-            condition1 = (rfoot_y >= 8)
-            condition2 = (abs(body_state['rightFoot']['angle']) < 0.02)
-        else:
-            condition1 = (lfoot_y >= 8)
-            condition2 = (abs(body_state['leftFoot']['angle']) < 0.02)
-
-        r3 = condition1 * condition2 * 0.05
-        # r3 = 0.5 if abs(rfoot_x - lfoot_x) > 5 and max(rfoot_y, lfoot_y) > 5 else 0
-
-        # info = game_state # {'r':body_state['rightFoot'], 'l':body_state['leftFoot']}
-
-        self.scoreTime = game_state['scoreTime']
-
-        if self.scoreTime > self.MAX_DURATION:
-            self.gameover = done = True
-        elif (game_state['gameEnded'] > 0) or (game_state['gameOver']) > 0:
+        torso_x = body_state['torso']['position_x']
+        self.pos = torso_x
+        torso_y = body_state['torso']['position_y']
+        torso_a = body_state['torso']['angle']
+        time = game_state['scoreTime']
+        if (game_state['gameEnded'] > 0) or (game_state['gameOver'] > 0) or (time > self.MAX_DURATION):
             self.gameover = done = True
         else:
             self.gameover = done = False
 
-        reward = r1 + r2 + r3
+        t = (game_state['scoreTime'] - self.previous_time)
+        self.mean_speed = (alpha * t) * ((game_state['score'] - self.previous_score) / (1)) + (
+                    1 - (alpha * t)) * self.mean_speed
 
-        torso_x = body_state['torso']['position_x']
+        standardize = 1
+        if standardize:
+            for body_part in body_state.items():
+                if 'position_x' in body_part[1]:
+                    body_part[1]['position_x'] = body_part[1]['position_x'] - body_state['torso']['position_x']
 
         states = []
         for body_part in body_state.values():
             for v in body_part.values():
-                if 'position_x' in body_part:
-                    v -= torso_x
                 states.append(v)
         states = np.array(states)
+
+        # Get reward
+        r1 = 4 * max(game_state['score'] + 1.5, 0) ** 2  # initial distance travelled
+        r2 = (
+                (body_state['head']['position_x'] - min(body_state['rightFoot']['position_x'],
+                                                        body_state['leftFoot']['position_x']))
+                / abs(body_state['rightFoot']['position_x'] - body_state['leftFoot']['position_x'])
+        )
+        r4 = -torso_y / 5  # reward for standing up
+
+        if self.mean_speed > 0:
+            r6 = 2 * self.mean_speed ** 2  # average velocity
+        else:
+            r6 = -2 * (-self.mean_speed) ** 2
+
+        if game_state['gameEnded'] == 0:
+            if (self.mean_speed < 0) and (r2 < 0):
+                reward = -r1 * (1 - max(min((abs(r2) - 0.5), 1.5), 0)) * r6 * (1 + max(min(r4, 1.5), 0))
+            else:
+                reward = r1 * (1 - max(min((abs(r2) - 0.5), 1.5), 0)) * r6 * (1 + max(min(r4, 1.5), 0))
+        else:
+            reward = -2 * abs(self.r2d)
+
+        reward = math.log(max(0.2 + reward, 0.0001)) - math.log(0.0001)
+
+        self.previous_torso_x = torso_x
+        self.previous_torso_y = torso_y
+        self.previous_score = game_state['score']
+        self.previous_time = game_state['scoreTime']
+        self.rewardp = reward
+        self.r2d = r2
 
         return states, reward, done, {}
 
@@ -154,18 +160,20 @@ class qwopEnv(Env):
         :return: self.get_state()
         """
 
-        self.press_key(self.ACTIONS_SPACE[i],self.PRESS_DURATION)
+        # execute action
+        for key in self.ACTIONS_SPACE[i].items():
+            for x in key[1][0]:
+                pyautogui.keyDown(x)
+            sleep(key[1][1])
+        for key in self.ACTIONS_SPACE[i].items():
+            for x in key[1][0]:
+                pyautogui.keyUp(x)
+            print("reward :{:4f}, action :{}, speed: {:4f}, x : {:4f} ".format(
+                self.rewardp, key[1],
+                self.mean_speed,
+                self.pos
+            ))
         return self.get_state()
-
-    def press_key(self, actions, duration):
-        """
-        press actions key(s) for duration seconds to execute action
-        """
-        for key in actions:
-            pyautogui.keyDown(key)
-        sleep(duration)
-        for key in actions:
-            pyautogui.keyUp(key)
 
     def reset(self):
         """
@@ -173,29 +181,40 @@ class qwopEnv(Env):
         :return: states in self.get_state() only
         """
 
-        self.press_key(['r'], self.PRESS_DURATION)
+        # restart the game
+        pyautogui.keyDown('r')
+        sleep(0.1)
+        pyautogui.keyUp('r')
 
         # Initialize
         self.gameover = False
         self.score = 0.
         self.scoreTime = 0.
         self.previous_score = 0.
-        self.previous_head_y = 0.
-        self.no_moving_count = 0
-
+        self.mean_speed = 0
+        self.previous_time = 0
+        self.previous_torso_x = 0
+        self.previous_torso_y = 0
         # return states only
+        sleep(0.7)
         return self.get_state()[0]
 
     def render(self, mode="human"):
         pass
 
     def close(self):
-        self.driver.close()
+        pass
+
 
 if __name__ == '__main__':
     env = qwopEnv()
+
     while True:
         if env.gameover:
             env.reset()
         else:
-            obs, reward, done, _ = env.step(env.action_space.sample())
+            s = time()
+            # return obs, reward, done, info from step function
+            env.step(env.action_space.sample())
+            e = time()
+            print('time for one iter:', e - s)

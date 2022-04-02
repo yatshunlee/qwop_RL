@@ -4,7 +4,7 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 from pathlib import Path
 import random, copy, collections, datetime, os
-from game_env_2t import qwopEnv
+from game_env import qwopEnv
 from logger import MetricLogger
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -90,7 +90,6 @@ class Rabbit:
         :param: state(body_state), dimension = (state_dim)
         :return: action_idx for rabbit to take action
         """
-
         # EXPLORE
         if np.random.rand() < self.exploration_rate:
             action_idx = np.random.randint(self.action_dim)
@@ -216,6 +215,7 @@ class Rabbit:
 
         return (td_est.mean().item(), loss)
 
+
 if __name__ == '__main__':
     env = qwopEnv()
     env.reset()
@@ -258,4 +258,4 @@ if __name__ == '__main__':
         logger.log_episode()
 
         if ep % 20 == 0:
-            logger.record(episode=ep, epsilon=rabbit.exploration_rate, step=rabbit.curr_step)
+            logger.record(episode=ep, epsilon=rabbit.exploration_rate, step=rabbit.current_step)
