@@ -63,11 +63,11 @@ class Rabbit:
 
         # - training parameter
         self.exploration_rate = 1
-        self.exploration_rate_decay = 0.999999
+        self.exploration_rate_decay = 0.997
         self.exploration_rate_min = 0.05
         self.current_step = 0
 
-        self.save_net_every = 5e5 # no. of exp between saving network
+        self.save_net_every = 5e3 # no. of exp between saving network
 
         # FOR CACHE AND RECALL
         self.memory = collections.deque(maxlen=100000) # truncated list w/ maxlen
@@ -186,7 +186,8 @@ class Rabbit:
             self.save_dir / f"qwop_ddqn_{num}.chkpt"
         )
         torch.save(
-            dict(model=self.net_state_dict(), exploration_rate=self.exploration_rate),
+            dict(model=self.net.state_dict(),
+                 exploration_rate=self.exploration_rate),
             save_path
         )
         print(f"Saved to {save_path} at step {self.current_step}.")

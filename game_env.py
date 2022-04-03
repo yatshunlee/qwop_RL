@@ -71,7 +71,7 @@ class qwopEnv(Env):
         # locate the game screen and auto click
         x, y, w, h = pyautogui.locateOnScreen(
             'game/start_screen.png',
-            confidence=0.7
+            confidence=0.2
         )
         pyautogui.click(x + w // 2, y + h // 2)
         sleep(.2)
