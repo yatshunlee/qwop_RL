@@ -1,0 +1,7 @@
+gym==0.19.0
+torch==1.10.2
+numpy==1.19.2
+selenium==4.0.0
+pyautogui==0.9.53
+matplotlib==3.3.2
+stable-baseline3==1.4.0
