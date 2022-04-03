@@ -11,4 +11,4 @@ Before training the agent, you can configure the training parameters as well as 
 1) Deep Q Network: `python dqn_main.py --train`, or
 2) Double Deep Q Network: `python ddqn_train.py`
 
-Credit to Wesleyliao for the game environment settings: https://github.com/Wesleyliao/QWOP-RL.
+Credit to @Wesleyliao for the game environment settings: https://github.com/Wesleyliao/QWOP-RL.
