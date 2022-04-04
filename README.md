@@ -1,5 +1,5 @@
 # qwop_RL
-One of the hardest game in the world. You can try to play by yourself on http://www.foddy.net/Athletics.html.
+It is one of the hardest games in the world. You can try on http://www.foddy.net/Athletics.html. We have trained an AI to complete the game.
 
 # Setup procedures:
 1) Run `pip install -r requirements.txt`
