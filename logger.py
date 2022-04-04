@@ -28,7 +28,7 @@ class MetricLogger:
         self.moving_avg_ep_lengths = []
         self.moving_avg_ep_avg_losses = []
         self.moving_avg_ep_avg_qs = []
-
+        self.episode_count = []
         # Current episode metric
         self.init_episode()
 
@@ -70,6 +70,7 @@ class MetricLogger:
         mean_ep_length = np.round(np.mean(self.ep_lengths[-100:]), 3)
         mean_ep_loss = np.round(np.mean(self.ep_avg_losses[-100:]), 3)
         mean_ep_q = np.round(np.mean(self.ep_avg_qs[-100:]), 3)
+        self.episode_count.append(episode)
         self.moving_avg_ep_rewards.append(mean_ep_reward)
         self.moving_avg_ep_lengths.append(mean_ep_length)
         self.moving_avg_ep_avg_losses.append(mean_ep_loss)
@@ -101,5 +102,11 @@ class MetricLogger:
 
         for metric in ["ep_rewards", "ep_lengths", "ep_avg_losses", "ep_avg_qs"]:
             plt.plot(getattr(self, f"moving_avg_{metric}"))
+            plt.ylabel(metric)
+            plt.xlabel("Index")            
+            #Episode as x axis
+            #plt.plot(getattr(self, f"episode_count"),getattr(self, f"moving_avg_{metric}"))
+            #plt.ylabel(metric)
+            #plt.xlabel("Episodes")
             plt.savefig(getattr(self, f"{metric}_plot"))
             plt.clf()
