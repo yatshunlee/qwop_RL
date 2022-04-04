@@ -9,7 +9,7 @@ It is one of the hardest games in the world. You can try on http://www.foddy.net
 4) Create another terminal to train the agent. You can train either on CPU or GPU environment.
 
 # Training Flowchart
-Our approach is through DQN and DDQN to train our agent to complete the 100m racing game. Following diagram illustrates the entire process of updating Q network for approximating the value function by DQN with Target Network as well as DDQN.
+Our approach is through DQN and DDQN to train our agent to complete the 100m racing game. Following diagram illustrates the entire process of updating Q network for approximating the value function by DQN with Target Network as well as DDQN. They share the same updating approach except the way they calculate for TD target.
 
 ![image](https://user-images.githubusercontent.com/69416199/161551941-4612d814-ab15-4d43-97c1-3109cd0eca6a.png)
 
