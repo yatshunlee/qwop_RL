@@ -8,8 +8,9 @@ One of the hardest game in the world. You can try to play by yourself on http://
     `python host_game.py`
 4) Create another terminal to train the agent. You can train either on CPU or GPU environment.
 
-# Flowchart of Training by DQN with Target Network as well as DDQN
-Our approach is through DQN and DDQN to train our agent to complete the 100m racing game.
+# Training Flowchart
+Our approach is through DQN and DDQN to train our agent to complete the 100m racing game. Following diagram illustrates the entire process of updating Q network for approximating the value function by DQN with Target Network as well as DDQN.
+
 ![image](https://user-images.githubusercontent.com/69416199/161551941-4612d814-ab15-4d43-97c1-3109cd0eca6a.png)
 
 # Training
