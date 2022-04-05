@@ -1,12 +1,11 @@
-import gym
 import torch
 import numpy as np
 from ddqn_train import DDQN
 from game_env import qwopEnv
 
 if __name__ == '__main__':
-    PATH = None
-    hidden_dim = 64
+    PATH = 'checkpoints/2022-04-03T14-20-52/qwop_ddqn_43.chkpt'
+    hidden_dim = 64*2
 
     env = qwopEnv()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -16,10 +15,11 @@ if __name__ == '__main__':
                  hidden_dim=hidden_dim).to(device)
 
     # torch.load() -> dict and load_state_dict into the model
-    model.load_state_dict(torch.load(PATH))
+    checkpoint = torch.load(PATH)
+    model.load_state_dict(checkpoint['model'])
 
     state = env.reset()
-    for i_episode in range(10):
+    for i_episode in range(5):
         observation = env.reset()
 
         while not env.gameover:
