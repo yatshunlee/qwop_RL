@@ -15,7 +15,11 @@ Our approach is through DQN and DDQN to train our agent to complete the 100m rac
 
 # Training
 Before training the agent, you can configure the training parameters as well as the action/state/reward design. You can choose to run the training by:
-1) Deep Q Network with Target Network: `python dqn_main.py --train`, or
+1) Deep Q Network with Target Network: `python dqn_main.py --train`, or `python dqn_main.py --retrain`
 2) Double Deep Q Network: `python ddqn_train.py`
+
+# Testing
+1) Deep Q Network with Target Network: `python dqn_main.py --test`
+2) Double Deep Q Network: `python ddqn_test.py`
 
 Credit to @Wesleyliao for the game environment settings: https://github.com/Wesleyliao/QWOP-RL.
