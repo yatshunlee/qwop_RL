@@ -4,10 +4,12 @@ from ddqn_train import DDQN
 from game_env import qwopEnv
 
 if __name__ == '__main__':
-    PATH = 'checkpoints/2022-04-03T14-20-52/qwop_ddqn_43.chkpt'
+    PATH = 'checkpoints/2022-04-03T14-20-52/qwop_ddqn_50.chkpt'
     hidden_dim = 64*2
 
     env = qwopEnv()
+    env.MAX_DURATION = 720
+    
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     model = DDQN(action_dim=env.action_space.n,
@@ -19,7 +21,7 @@ if __name__ == '__main__':
     model.load_state_dict(checkpoint['model'])
 
     state = env.reset()
-    for i_episode in range(5):
+    for i_episode in range(1):
         observation = env.reset()
 
         while not env.gameover:
@@ -35,4 +37,4 @@ if __name__ == '__main__':
             if done:
                 break
 
-    env.close()
+    # env.close()

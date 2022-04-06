@@ -53,7 +53,7 @@ class qwopEnv(Env):
         self.previous_torso_x = 0
         self.previous_torso_y = 0
         self.game_start()
-        self.MAX_DURATION = 80  # max seconds per one round
+        self.MAX_DURATION = 600  # max seconds per one round
         self.rewardp = 0
         self.r2d = 0
         self.pos = 0
@@ -91,7 +91,6 @@ class qwopEnv(Env):
         """
 
         alpha = 0.18  # weigh for velocity
-        self.MAX_DURATION = 600
         game_state = self.get_variable('globalgamestate')
         body_state = self.get_variable('globalbodystate')
         torso_x = body_state['torso']['position_x']
