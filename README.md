@@ -34,9 +34,13 @@ Before training the agent, you can configure the training parameters as well as 
 2) Double Deep Q Network: `python ddqn_test.py`
 
 # Videos of Performance
-- Training Process: https://drive.google.com/file/d/15IC227quOzvnp3kPCHc8gTxv3fjIBRTY/view?usp=sharing
-- Avg. performance (5~10 min): https://drive.google.com/file/d/1g4-nemSH48i-Dl_-h3mAmzq_HFhBOK1b/view?usp=sharing
-- Best (3 min 15 sec): https://drive.google.com/file/d/122VpHFDevAKw39ia4rBXRtUYgZRyO8WB/view?usp=sharing
+- Avg. performance (5~10 min):
+
+![ddqn](https://user-images.githubusercontent.com/69416199/164024874-0ac85441-90ee-4327-b2a6-95d02877a164.gif)
+
+- Best (3 min 15 sec): 
+
+![dqn_usagii](https://user-images.githubusercontent.com/69416199/164024976-0fcea2ab-8909-49d9-b253-50e708183322.gif)
 
 # Credits
 - to the author of QWOP http://www.foddy.net/Athletics.html
