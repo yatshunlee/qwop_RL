@@ -34,11 +34,11 @@ Before training the agent, you can configure the training parameters as well as 
 2) Double Deep Q Network: `python ddqn_test.py`
 
 # Videos of Performance
-- Avg. performance (5~10 min):
+- First Running Form Trained (5~10 min):
 
 ![ddqn](https://user-images.githubusercontent.com/69416199/164024874-0ac85441-90ee-4327-b2a6-95d02877a164.gif)
 
-- Best (3 min 15 sec): 
+- Best Running Form Trained (3 min 15 sec): 
 
 ![dqn_usagii](https://user-images.githubusercontent.com/69416199/164024976-0fcea2ab-8909-49d9-b253-50e708183322.gif)
 
