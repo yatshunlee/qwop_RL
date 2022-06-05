@@ -39,6 +39,7 @@ Before training the agent, you can configure the training parameters as well as 
 ![ddqn](https://user-images.githubusercontent.com/69416199/164024874-0ac85441-90ee-4327-b2a6-95d02877a164.gif)
 
 - Best Running Form Trained (3 min 15 sec): 
+https://youtu.be/tmRIeSdA7N8
 
 ![dqn_usagii](https://user-images.githubusercontent.com/69416199/164024976-0fcea2ab-8909-49d9-b253-50e708183322.gif)
 
