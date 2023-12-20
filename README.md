@@ -3,8 +3,8 @@ It is one of the hardest games in the world. You can try on http://www.foddy.net
 Our objective is to:
 1) train up a model to complete 100m in a reasonable time
 2) improve the speed of the ragdoll to a competitive level
-3) converged the model to a stable running pattern
-4) to create the best record on our own
+3) stablize the running pattern of the agent
+4) create the best record on our own
 
 # Setup Procedures
 1) Run `pip install -r requirements.txt`
